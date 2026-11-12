@@ -50,3 +50,4 @@ def parse_vectors(result: str) -> np.ndarray:
         fields = [f.strip() for f in line.split(",")]
         rows.append([float(f) for f in fields[2:8]])
     return np.array(rows)
+

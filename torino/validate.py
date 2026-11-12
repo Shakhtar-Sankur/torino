@@ -22,6 +22,7 @@ from torino.ephemeris import AU_KM, Ephemeris
 from torino.horizons import state_vectors
 from torino.perturbers import Asteroids, WithAsteroids
 from torino.propagate import propagate
+from torino.sbdb import nongrav_parameters
 
 # Near-Earth asteroids from the risk lists and well-observed ones, with Horizons designations.
 OBJECTS = {
@@ -35,16 +36,21 @@ OBJECTS = {
 EPOCH_JD = 2461041.5  # 2026-01-01 00:00 TDB
 DAYS = [30, 365]
 
-# Force models, in the order they were added: whether each uses relativity and the main-belt asteroids.
+# Force models, in the order they were added: whether each uses relativity, the main-belt asteroids and the object's
+# non-gravitational parameters from its JPL orbit.
 MODELS = {
-    "Newtonian": {"relativity": False, "asteroids": False},
-    "+ relativity": {"relativity": True, "asteroids": False},
-    "+ asteroids": {"relativity": True, "asteroids": True},
+    "Newtonian": {"relativity": False, "asteroids": False, "nongrav": False},
+    "+ relativity": {"relativity": True, "asteroids": False, "nongrav": False},
+    "+ asteroids": {"relativity": True, "asteroids": True, "nongrav": False},
+    "+ non-gravitational": {"relativity": True, "asteroids": True, "nongrav": True},
 }
 MODEL_NOTES = [
     "Newtonian: point masses of the Sun, the eight planets, the Moon and Pluto, from DE440s.",
     "+ relativity: adds the Sun's post-Newtonian (1PN) acceleration.",
     "+ asteroids: adds the 16 most massive main-belt asteroids (JPL's SB441-N16 set and GM values).",
+    ("+ non-gravitational: adds the non-gravitational accelerations of the object's JPL orbit solution, from the JPL "
+     "Small-Body Database: radial, transverse (Yarkovsky) and normal (A1, A2, A3), and radiation pressure from the "
+     "area-to-mass ratio. For objects without them this column equals the previous one."),
 ]
 
 
@@ -64,9 +70,10 @@ def validate(objects: dict[str, str], jd0: float, days: list[int], ephemeris,
     for designation, label in objects.items():
         jd = [jd0] + [jd0 + d for d in days]
         truth = heliocentric_truth(designation, jd, ephemeris)
+        a123 = nongrav_parameters(designation) if any(m["nongrav"] for m in models.values()) else None
         for model, m in models.items():
             ours = propagate(truth[0], jd0, jd[1:], with_asteroids if m["asteroids"] else ephemeris,
-                             relativity=m["relativity"])
+                             relativity=m["relativity"], nongrav=a123 if m["nongrav"] and any(a123) else None)
             for d, mine, ref in zip(days, ours, truth[1:]):
                 rows.append((label, model, d, float(np.linalg.norm(mine[:3] - ref[:3]) * AU_KM)))
     return rows

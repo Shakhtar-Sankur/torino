@@ -118,3 +118,46 @@ def test_asteroids_follow_their_orbits_and_add_their_pull():
     extra = acceleration(r, both.positions(jd0), both.gm) - acceleration(r, planets.positions(jd0), planets.gm)
     d = ceres0[:3] - r
     assert extra == pytest.approx(gm_ceres * d / np.linalg.norm(d) ** 3, rel=1e-12)
+
+
+def test_nongrav_directions_and_scaling():
+    from torino.propagate import nongrav_acceleration
+
+    r, v = np.array([2.0, 0.0, 0.0]), np.array([0.0, 0.01, 0.0])  # at 2 au, moving in +y
+    assert nongrav_acceleration(r, v, (1e-12, 0, 0)) == pytest.approx([0.25e-12, 0, 0], abs=1e-30)
+    assert nongrav_acceleration(r, v, (0, 1e-12, 0)) == pytest.approx([0, 0.25e-12, 0], abs=1e-30)
+    assert nongrav_acceleration(r, v, (0, 0, 1e-12)) == pytest.approx([0, 0, 0.25e-12], abs=1e-30)
+
+
+def test_transverse_acceleration_changes_the_orbit_as_yarkovsky_does():
+    # A positive A2 pushes along the motion, so the orbit gains energy and the semi-major axis grows; negative shrinks.
+    state0, period = kepler_orbit(a=1.0, e=0.1)
+    mu = SunOnly.gm[0]
+    jd0 = 2461041.5
+
+    def semi_major_axis(s):
+        return 1.0 / (2.0 / np.linalg.norm(s[:3]) - s[3:] @ s[3:] / mu)
+
+    a0 = semi_major_axis(state0)
+    up = propagate(state0, jd0, [jd0 + 10 * period], SunOnlyWithVelocity(), nongrav=(0.0, 1e-12, 0.0))[0]
+    down = propagate(state0, jd0, [jd0 + 10 * period], SunOnlyWithVelocity(), nongrav=(0.0, -1e-12, 0.0))[0]
+    assert semi_major_axis(up) > a0 > semi_major_axis(down)
+    # For a near-circular orbit at 1 au, da/dt = 2 A2 / n, so about 2 * 1e-12 * 10 * period / n.
+    n = 2 * np.pi / period
+    assert semi_major_axis(up) - a0 == pytest.approx(2e-12 * 10 * period / n, rel=0.05)
+
+
+def test_sbdb_model_pars():
+    from torino.sbdb import parse_model_pars
+
+    # As returned by the SBDB API for Apophis (solution 220), Bennu (118) and Eros (659).
+    apophis = [{"name": "A1", "value": "5e-13"}, {"name": "A2", "value": "-2.902e-14"}, {"name": "ALN", "value": "1."},
+               {"name": "NK", "value": "0."}, {"name": "NM", "value": "2."}, {"name": "R0", "value": "1."}]
+    assert parse_model_pars(apophis) == (5e-13, -2.902e-14, 0.0)
+    bennu = [{"name": "AMRAT", "value": "2.64e-06"}, {"name": "RHO", "value": "1190"}]
+    a1, a2, a3 = parse_model_pars(bennu)
+    # 2.64e-6 m^2/kg x 4.54e-6 N/m^2 = 1.20e-11 m/s^2 = 5.98e-13 au/day^2
+    assert a1 == pytest.approx(5.98e-13, rel=1e-3) and a2 == 0.0 and a3 == 0.0
+    assert parse_model_pars([]) == (0.0, 0.0, 0.0)
+    with pytest.raises(ValueError):
+        parse_model_pars([{"name": "A2", "value": "1e-14"}, {"name": "NM", "value": "2.15"}])
