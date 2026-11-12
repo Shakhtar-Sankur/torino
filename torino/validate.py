@@ -29,27 +29,42 @@ OBJECTS = {
 EPOCH_JD = 2461041.5  # 2026-01-01 00:00 TDB
 DAYS = [30, 365]
 
+# Force models, in the order they were added, with the propagate() options that select them.
+MODELS = {
+    "Newtonian": {},
+    "+ relativity": {"relativity": True},
+}
+MODEL_NOTES = [
+    "Newtonian: point masses of the Sun, the eight planets, the Moon and Pluto, from DE440s.",
+    "+ relativity: adds the Sun's post-Newtonian (1PN) acceleration.",
+]
 
-def validate(objects: dict[str, str], jd0: float, days: list[int], ephemeris) -> list[tuple[str, int, float]]:
+
+def validate(objects: dict[str, str], jd0: float, days: list[int], ephemeris,
+             models: dict[str, dict] = MODELS) -> list[tuple[str, str, int, float]]:
+    """Rows of (object, model, days, position difference in km)."""
     rows = []
     for designation, label in objects.items():
         jd = [jd0] + [jd0 + d for d in days]
         truth = state_vectors(designation, jd)
-        ours = propagate(truth[0], jd0, jd[1:], ephemeris)
-        for d, mine, ref in zip(days, ours, truth[1:]):
-            rows.append((label, d, float(np.linalg.norm(mine[:3] - ref[:3]) * AU_KM)))
+        for model, options in models.items():
+            ours = propagate(truth[0], jd0, jd[1:], ephemeris, **options)
+            for d, mine, ref in zip(days, ours, truth[1:]):
+                rows.append((label, model, d, float(np.linalg.norm(mine[:3] - ref[:3]) * AU_KM)))
     return rows
 
 
-def markdown(rows: list[tuple[str, int, float]], days: list[int], model: str) -> str:
-    by = {(label, d): err for label, d, err in rows}
-    labels = list(dict.fromkeys(label for label, _, _ in rows))
-    lines = [f"Position difference from JPL Horizons (km), starting from Horizons' state at 2026-01-01 TDB. "
-             f"Force model: {model}.", "",
-             "| Object | " + " | ".join(f"{d} days" for d in days) + " |",
-             "| --- | " + " | ".join("---:" for _ in days) + " |"]
+def markdown(rows: list[tuple[str, str, int, float]], days: list[int], notes: list[str] = MODEL_NOTES) -> str:
+    by = {(label, model, d): err for label, model, d, err in rows}
+    labels = list(dict.fromkeys(row[0] for row in rows))
+    models = list(dict.fromkeys(row[1] for row in rows))
+    columns = [(m, d) for m in models for d in days]
+    lines = ["Position difference from JPL Horizons (km), starting from Horizons' state at 2026-01-01 TDB.", "",
+             "| Object | " + " | ".join(f"{m}, {d} days" for m, d in columns) + " |",
+             "| --- | " + " | ".join("---:" for _ in columns) + " |"]
     for label in labels:
-        lines.append(f"| {label} | " + " | ".join(f"{by[(label, d)]:,.1f}" for d in days) + " |")
+        lines.append(f"| {label} | " + " | ".join(f"{by[(label, m, d)]:,.1f}" for m, d in columns) + " |")
+    lines += [""] + [f"- {note}" for note in notes]
     return "\n".join(lines) + "\n"
 
 
@@ -57,8 +72,7 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", help="write the markdown table here")
     args = parser.parse_args(argv)
-    model = "Newtonian point masses: Sun, eight planets, Moon, Pluto (DE440s)"
-    text = markdown(validate(OBJECTS, EPOCH_JD, DAYS, Ephemeris()), DAYS, model)
+    text = markdown(validate(OBJECTS, EPOCH_JD, DAYS, Ephemeris()), DAYS)
     print(text)
     if args.out:
         with open(args.out, "w") as f:

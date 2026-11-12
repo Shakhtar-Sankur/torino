@@ -77,6 +77,11 @@ class Ephemeris:
         self.bodies = bodies or list(_CHAINS)
         self.gm = np.array([gm_au3_day2(b) for b in self.bodies])
 
+    def sun_state(self, jd_tdb: float) -> tuple[np.ndarray, np.ndarray]:
+        """The Sun's barycentric position (au) and velocity (au/day)."""
+        position, velocity = self.kernel[0, 10].compute_and_differentiate(jd_tdb)  # km and km/day
+        return position / AU_KM, velocity / AU_KM
+
     def positions(self, jd_tdb: float) -> np.ndarray:
         """Array of shape (len(bodies), 3)."""
         out = np.empty((len(self.bodies), 3))

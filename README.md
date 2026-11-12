@@ -25,7 +25,7 @@ The daily reports are in [`reports/`](reports/), the full table in [`data/compar
 | Milestone | State |
 |---|---|
 | M0: daily comparison of JPL Sentry and ESA NEOCC, object by object, with a dated report and the history in git | running daily |
-| M1: n-body orbit propagator, validated against JPL Horizons | step 1 done (Newtonian, below); relativity and main-belt perturbers next |
+| M1: n-body orbit propagator, validated against JPL Horizons | Newtonian gravity and relativity done (below); main-belt perturbers next |
 | M2: Monte Carlo impact probabilities from public orbit solutions, compared with Sentry and NEOCC for listed objects | planned |
 | M3: public page with the daily comparison and its history | planned |
 
@@ -50,22 +50,22 @@ It uses only the Python standard library. `.github/workflows/daily.yml` runs it 
 
 ## M1: the propagator
 
-`torino/propagate.py` integrates a small body's barycentric orbit with SciPy's DOP853 (8th-order Runge-Kutta; relative tolerance 10⁻¹², time counted from the start epoch). The force model in this step is Newtonian point-mass gravity from the Sun, the eight planets, the Moon and Pluto, with positions and GM values from JPL's DE440s ephemeris (`torino/ephemeris.py`). The tests check it against the exact two-body solution: after one orbital period it returns to perihelion within 150 m, and energy and angular momentum are conserved to 10⁻¹⁰.
+`torino/propagate.py` integrates a small body's barycentric orbit with SciPy's DOP853 (8th-order Runge-Kutta; relative tolerance 10⁻¹², time counted from the start epoch). The force model is Newtonian point-mass gravity from the Sun, the eight planets, the Moon and Pluto, with positions and GM values from JPL's DE440s ephemeris (`torino/ephemeris.py`), plus, optionally, the Sun's general-relativistic (post-Newtonian) acceleration. The tests check it against exact results: in the two-body problem it returns to perihelion within 150 m after one orbit and conserves energy and angular momentum to 10⁻¹⁰, and with relativity the perihelion advances by Einstein's 6πGM/(c²a(1−e²)) per orbit to within 0.1%.
 
 `torino/validate.py` starts from JPL Horizons' state of each object and compares torino's propagated position with Horizons':
 
-Position difference from JPL Horizons (km), starting from Horizons' state at 2026-01-01 TDB. Force model: Newtonian point masses: Sun, eight planets, Moon, Pluto (DE440s).
+Position difference from JPL Horizons (km), starting from Horizons' state at 2026-01-01 TDB:
 
-| Object | 30 days | 365 days |
-| --- | ---: | ---: |
-| 99942 Apophis | 1.5 | 132.9 |
-| 101955 Bennu | 26.9 | 1,749.5 |
-| 29075 (1950 DA) | 0.2 | 19.4 |
-| 433 Eros | 0.4 | 49.1 |
-| 2000 SG344 | 0.8 | 72.2 |
-| 2008 JL3 | 0.0 | 5.7 |
+| Object | Newtonian, 30 days | Newtonian, 365 days | + relativity, 30 days | + relativity, 365 days |
+| --- | ---: | ---: | ---: | ---: |
+| 99942 Apophis | 1.5 | 132.9 | 0.1 | 3.1 |
+| 101955 Bennu | 26.9 | 1,749.5 | 27.5 | 1,804.8 |
+| 29075 (1950 DA) | 0.2 | 19.4 | 0.0 | 0.2 |
+| 433 Eros | 0.4 | 49.1 | 0.0 | 0.3 |
+| 2000 SG344 | 0.8 | 72.2 | 0.0 | 0.4 |
+| 2008 JL3 | 0.0 | 5.7 | 0.0 | 3.6 |
 
-The difference is what this force model leaves out compared with JPL's: general relativity, the largest main-belt asteroids, and for some objects non-gravitational forces such as the Yarkovsky effect. The next steps add them one at a time and record how much each reduces the difference.
+Relativity is the largest thing Newtonian gravity leaves out: adding it brings five of the six objects within 4 km of JPL after a year. What remains is the largest main-belt asteroids, which JPL also includes, and for some objects non-gravitational forces such as the Yarkovsky effect. Bennu's difference does not shrink with relativity, so it has another cause; finding it is the next step. Each step is added separately and its effect recorded here.
 
 ```
 pip install -r requirements.txt

@@ -64,3 +64,34 @@ def test_horizons_helpers():
     v = parse_vectors(result)
     assert v.shape == (1, 6)
     assert v[0, 0] == pytest.approx(0.6306953539299172)
+
+
+class SunOnlyWithVelocity(SunOnly):
+    """The fixed Sun, with what the relativistic term needs."""
+
+    bodies = ("Sun",)
+
+    def sun_state(self, jd):
+        return np.zeros(3), np.zeros(3)
+
+
+def perihelion_angle(state, mu):
+    """Direction of the Laplace-Runge-Lenz (eccentricity) vector in the orbital plane."""
+    r, v = state[:3], state[3:]
+    e_vec = np.cross(v, np.cross(r, v)) / mu - r / np.linalg.norm(r)
+    return np.arctan2(e_vec[1], e_vec[0])
+
+
+def test_relativistic_perihelion_precession():
+    # A tight, eccentric orbit so the effect is large; compare with Einstein's 6 pi GM / (c^2 a (1 - e^2)) per orbit.
+    from torino.propagate import C_AU_DAY
+
+    a, e, orbits = 0.2, 0.8, 20
+    state0, period = kepler_orbit(a=a, e=e)
+    mu = SunOnly.gm[0]
+    jd0 = 2461041.5
+    end = propagate(state0, jd0, [jd0 + orbits * period], SunOnlyWithVelocity(), relativity=True)[0]
+    expected = orbits * 6 * np.pi * mu / (C_AU_DAY**2 * a * (1 - e**2))
+    assert perihelion_angle(end, mu) == pytest.approx(expected, rel=1e-3)
+    newtonian = propagate(state0, jd0, [jd0 + orbits * period], SunOnlyWithVelocity())[0]
+    assert abs(perihelion_angle(newtonian, mu)) < 1e-3 * expected
