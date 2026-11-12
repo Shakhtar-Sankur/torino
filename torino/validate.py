@@ -20,6 +20,7 @@ import numpy as np
 
 from torino.ephemeris import AU_KM, Ephemeris
 from torino.horizons import state_vectors
+from torino.perturbers import Asteroids, WithAsteroids
 from torino.propagate import propagate
 
 # Near-Earth asteroids from the risk lists and well-observed ones, with Horizons designations.
@@ -34,14 +35,16 @@ OBJECTS = {
 EPOCH_JD = 2461041.5  # 2026-01-01 00:00 TDB
 DAYS = [30, 365]
 
-# Force models, in the order they were added, with the propagate() options that select them.
+# Force models, in the order they were added: whether each uses relativity and the main-belt asteroids.
 MODELS = {
-    "Newtonian": {},
-    "+ relativity": {"relativity": True},
+    "Newtonian": {"relativity": False, "asteroids": False},
+    "+ relativity": {"relativity": True, "asteroids": False},
+    "+ asteroids": {"relativity": True, "asteroids": True},
 }
 MODEL_NOTES = [
     "Newtonian: point masses of the Sun, the eight planets, the Moon and Pluto, from DE440s.",
     "+ relativity: adds the Sun's post-Newtonian (1PN) acceleration.",
+    "+ asteroids: adds the 16 most massive main-belt asteroids (JPL's SB441-N16 set and GM values).",
 ]
 
 
@@ -54,12 +57,16 @@ def heliocentric_truth(designation: str, jd: list[float], ephemeris) -> np.ndarr
 def validate(objects: dict[str, str], jd0: float, days: list[int], ephemeris,
              models: dict[str, dict] = MODELS) -> list[tuple[str, str, int, float]]:
     """Rows of (object, model, days, position difference in km)."""
+    with_asteroids = None
+    if any(m["asteroids"] for m in models.values()):
+        with_asteroids = WithAsteroids(ephemeris, Asteroids(ephemeris, jd0, jd0 + max(days)))
     rows = []
     for designation, label in objects.items():
         jd = [jd0] + [jd0 + d for d in days]
         truth = heliocentric_truth(designation, jd, ephemeris)
-        for model, options in models.items():
-            ours = propagate(truth[0], jd0, jd[1:], ephemeris, **options)
+        for model, m in models.items():
+            ours = propagate(truth[0], jd0, jd[1:], with_asteroids if m["asteroids"] else ephemeris,
+                             relativity=m["relativity"])
             for d, mine, ref in zip(days, ours, truth[1:]):
                 rows.append((label, model, d, float(np.linalg.norm(mine[:3] - ref[:3]) * AU_KM)))
     return rows

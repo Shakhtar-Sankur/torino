@@ -95,3 +95,26 @@ def test_relativistic_perihelion_precession():
     assert perihelion_angle(end, mu) == pytest.approx(expected, rel=1e-3)
     newtonian = propagate(state0, jd0, [jd0 + orbits * period], SunOnlyWithVelocity())[0]
     assert abs(perihelion_angle(newtonian, mu)) < 1e-3 * expected
+
+
+def test_asteroids_follow_their_orbits_and_add_their_pull():
+    from torino.perturbers import PERTURBERS, Asteroids, WithAsteroids
+    from torino.propagate import acceleration
+
+    planets = SunOnlyWithVelocity()
+    jd0 = 2461041.5
+    ceres0, period = kepler_orbit(a=2.77, e=0.08)
+    asteroids = Asteroids(planets, jd0, jd0 + period, names=["Ceres"], states=np.array([ceres0]), relativity=False)
+    # The dense trajectory starts at the given state and, without relativity, comes back to it after one orbit.
+    assert asteroids.positions(jd0)[0] == pytest.approx(ceres0[:3], abs=1e-12)
+    assert np.linalg.norm(asteroids.positions(jd0 + period)[0] - ceres0[:3]) < 1e-9
+    with pytest.raises(ValueError):
+        asteroids.positions(jd0 + period + 1)
+
+    both = WithAsteroids(planets, asteroids)
+    assert both.bodies == ["Sun", "Ceres"]
+    gm_ceres = PERTURBERS["Ceres"][1]
+    r = np.array([2.0, 0.5, 0.0])
+    extra = acceleration(r, both.positions(jd0), both.gm) - acceleration(r, planets.positions(jd0), planets.gm)
+    d = ceres0[:3] - r
+    assert extra == pytest.approx(gm_ceres * d / np.linalg.norm(d) ** 3, rel=1e-12)
