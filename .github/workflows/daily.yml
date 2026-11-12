@@ -1,0 +1,30 @@
+# Every day, after ESA's usual afternoon update: fetch JPL Sentry's and ESA NEOCC's risk lists, compare them,
+# and keep the table, the summary and the day's report.
+name: daily comparison
+on:
+  schedule:
+    - cron: "47 19 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: daily
+  cancel-in-progress: false
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compare the two risk lists
+        run: python -m torino.daily --data data --reports reports
+      - name: Keep the day's results
+        run: |
+          git config user.name "Sankur Kundu"
+          git config user.email "sankur.kundu.tw@gmail.com"
+          git add data reports
+          git diff --cached --quiet || git commit -m "Daily comparison $(date -u +%F)"
+          git pull --rebase -q origin main && git push -q origin HEAD:main
