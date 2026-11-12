@@ -25,7 +25,7 @@ The daily reports are in [`reports/`](reports/), the full table in [`data/compar
 | Milestone | State |
 |---|---|
 | M0: daily comparison of JPL Sentry and ESA NEOCC, object by object, with a dated report and the history in git | running daily |
-| M1: n-body orbit propagator, validated against JPL Horizons | next |
+| M1: n-body orbit propagator, validated against JPL Horizons | step 1 done (Newtonian, below); relativity and main-belt perturbers next |
 | M2: Monte Carlo impact probabilities from public orbit solutions, compared with Sentry and NEOCC for listed objects | planned |
 | M3: public page with the daily comparison and its history | planned |
 
@@ -47,6 +47,30 @@ python -m pytest                           # tests, on real samples of both list
 ```
 
 It uses only the Python standard library. `.github/workflows/daily.yml` runs it every day after ESA's usual update and commits the results.
+
+## M1: the propagator
+
+`torino/propagate.py` integrates a small body's barycentric orbit with SciPy's DOP853 (8th-order Runge-Kutta; relative tolerance 10⁻¹², time counted from the start epoch). The force model in this step is Newtonian point-mass gravity from the Sun, the eight planets, the Moon and Pluto, with positions and GM values from JPL's DE440s ephemeris (`torino/ephemeris.py`). The tests check it against the exact two-body solution: after one orbital period it returns to perihelion within 150 m, and energy and angular momentum are conserved to 10⁻¹⁰.
+
+`torino/validate.py` starts from JPL Horizons' state of each object and compares torino's propagated position with Horizons':
+
+Position difference from JPL Horizons (km), starting from Horizons' state at 2026-01-01 TDB. Force model: Newtonian point masses: Sun, eight planets, Moon, Pluto (DE440s).
+
+| Object | 30 days | 365 days |
+| --- | ---: | ---: |
+| 99942 Apophis | 1.5 | 132.9 |
+| 101955 Bennu | 26.9 | 1,749.5 |
+| 29075 (1950 DA) | 0.2 | 19.4 |
+| 433 Eros | 0.4 | 49.1 |
+| 2000 SG344 | 0.8 | 72.2 |
+| 2008 JL3 | 0.0 | 5.7 |
+
+The difference is what this force model leaves out compared with JPL's: general relativity, the largest main-belt asteroids, and for some objects non-gravitational forces such as the Yarkovsky effect. The next steps add them one at a time and record how much each reduces the difference.
+
+```
+pip install -r requirements.txt
+python -m torino.validate --out validation/m1.md   # downloads DE440s (33 MB) once
+```
 
 ## Data
 
