@@ -52,20 +52,22 @@ It uses only the Python standard library. `.github/workflows/daily.yml` runs it 
 
 `torino/propagate.py` integrates a small body's barycentric orbit with SciPy's DOP853 (8th-order Runge-Kutta; relative tolerance 10⁻¹², time counted from the start epoch). The force model is Newtonian point-mass gravity from the Sun, the eight planets, the Moon and Pluto, with positions and GM values from JPL's DE440s ephemeris (`torino/ephemeris.py`), plus, optionally, the Sun's general-relativistic (post-Newtonian) acceleration. The tests check it against exact results: in the two-body problem it returns to perihelion within 150 m after one orbit and conserves energy and angular momentum to 10⁻¹⁰, and with relativity the perihelion advances by Einstein's 6πGM/(c²a(1−e²)) per orbit to within 0.1%.
 
-`torino/validate.py` starts from JPL Horizons' state of each object and compares torino's propagated position with Horizons':
+`torino/validate.py` starts from JPL Horizons' state of each object and compares torino's propagated position with Horizons'. It takes Horizons' states relative to the Sun and makes them barycentric with torino's own ephemeris, so the comparison does not depend on which planetary ephemeris a trajectory was computed with (see Bennu, below).
 
-Position difference from JPL Horizons (km), starting from Horizons' state at 2026-01-01 TDB:
+Position difference from JPL Horizons (km), starting from Horizons' heliocentric state at 2026-01-01 TDB:
 
 | Object | Newtonian, 30 days | Newtonian, 365 days | + relativity, 30 days | + relativity, 365 days |
 | --- | ---: | ---: | ---: | ---: |
 | 99942 Apophis | 1.5 | 132.9 | 0.1 | 3.1 |
-| 101955 Bennu | 26.9 | 1,749.5 | 27.5 | 1,804.8 |
+| 101955 Bennu | 0.7 | 58.7 | 0.1 | 3.3 |
 | 29075 (1950 DA) | 0.2 | 19.4 | 0.0 | 0.2 |
 | 433 Eros | 0.4 | 49.1 | 0.0 | 0.3 |
 | 2000 SG344 | 0.8 | 72.2 | 0.0 | 0.4 |
 | 2008 JL3 | 0.0 | 5.7 | 0.0 | 3.6 |
 
-Relativity is the largest thing Newtonian gravity leaves out: adding it brings five of the six objects within 4 km of JPL after a year. What remains is the largest main-belt asteroids, which JPL also includes, and for some objects non-gravitational forces such as the Yarkovsky effect. Bennu's difference does not shrink with relativity, so it has another cause; finding it is the next step. Each step is added separately and its effect recorded here.
+Relativity is the largest thing Newtonian gravity leaves out: adding it brings all six objects within 4 km of JPL after a year. What remains is mainly the largest main-belt asteroids, which JPL also includes, and for some objects non-gravitational forces such as the Yarkovsky effect. Each is added separately and its effect recorded here.
+
+**Bennu.** Compared in barycentric coordinates, as in the first version of this check, Bennu was 1,805 km from Horizons after a year even with relativity, while the other objects were within 4 km. The difference was radial at first and grew from day 0 as a constant acceleration, which points to a frame mismatch rather than a missing force. Bennu's Horizons trajectory is not a standard orbit solution: it is the reconstruction from the OSIRIS-REx mission (Farnocchia et al. 2021, Icarus 369:114594), computed with the DE424 planetary ephemeris. Its barycentric positions in Horizons are offset by a nearly constant 115.9 km from its heliocentric positions plus DE440's Sun; for Apophis the same offset is 0.0 km. In the barycentric frame torino therefore put the Sun 116 km from where Bennu's trajectory had it. Starting from and comparing with the heliocentric state removes the offset, and Bennu agrees with Horizons to 3.3 km after a year.
 
 ```
 pip install -r requirements.txt
