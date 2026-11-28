@@ -1,12 +1,12 @@
 {
- "both": 1986,
- "date": "2026-11-27",
+ "both": 1985,
+ "date": "2026-11-28",
  "esa": 2217,
- "esa_list_updated_utc": "2026-11-26 13:24",
- "esa_only": 231,
- "ip_disagree_10x": 299,
- "jpl": 2258,
- "jpl_only": 272,
- "objects": 2489,
+ "esa_list_updated_utc": "2026-11-28 02:06",
+ "esa_only": 232,
+ "ip_disagree_10x": 297,
+ "jpl": 2259,
+ "jpl_only": 274,
+ "objects": 2491,
  "torino_scale_differs": 0
 }
